@@ -1,10 +1,10 @@
 [![de](https://img.shields.io/badge/lang-de-green.svg)](README.de.md)
-![GitHub License](https://img.shields.io/github/license/s-quirin/EasyGUIng)
-![GitHub release (latest by date)](https://img.shields.io/github/v/release/s-quirin/EasyGUIng)
-![GitHub Pipenv locked Python version](https://img.shields.io/github/pipenv/locked/python-version/s-quirin/EasyGUIng)
-![GitHub Pipenv locked dependency version](https://img.shields.io/github/pipenv/locked/dependency-version/s-quirin/EasyGUIng/pyside6-essentials)
-![GitHub Pipenv locked dependency version](https://img.shields.io/github/pipenv/locked/dependency-version/s-quirin/EasyGUIng/matplotlib)
-![GitHub Pipenv locked dependency version](https://img.shields.io/github/pipenv/locked/dependency-version/s-quirin/EasyGUIng/pint)
+[![License](https://img.shields.io/badge/license-LGPL-green)](COPYING)
+[![GitHub release (latest by date)](https://img.shields.io/github/v/release/s-quirin/EasyGUIng)](https://github.com/s-quirin/EasyGUIng/releases)
+[![GitHub Pipenv locked Python version](https://img.shields.io/github/pipenv/locked/python-version/s-quirin/EasyGUIng)](Pipfile.lock)
+[![GitHub Pipenv locked dependency version](https://img.shields.io/github/pipenv/locked/dependency-version/s-quirin/EasyGUIng/pyside6-essentials)](Pipfile.lock)
+[![GitHub Pipenv locked dependency version](https://img.shields.io/github/pipenv/locked/dependency-version/s-quirin/EasyGUIng/matplotlib)](Pipfile.lock)
+[![GitHub Pipenv locked dependency version](https://img.shields.io/github/pipenv/locked/dependency-version/s-quirin/EasyGUIng/pint)](Pipfile.lock)
 
 # EasyGUIng
 ## Ein Framework zur Bereitstellung mathematischer Modelle mit Benutzeroberfläche
