@@ -24,36 +24,15 @@
 # ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 # OTHER DEALINGS IN THE SOFTWARE.
 
-input, option = {}, {}    # init
+import numpy as np
 
-# --- Modellbeschreibung ---
-# Titel, Beschreibung (in Markdown), Autor/Kontakt, Version
-title = 'Plancksches Strahlungsgesetz'
-description = 'Berechnung der spektralen Strahldichte'
-author = 'Universität des Saarlandes'
-version = '0.1'
-
-# --- Ein- und Ausgabe ---
-# Name Ausgabewert(e) (y-Wert)
-#   option['output'] = ('name', …)
-option['output'] = ('Spektrale Strahldichte')
-
-# Eingabewerte mit Name, Minimum, Maximum und physik. Einheit
-#   input['x'] = ('name', (min value, …, max value), 'unit')
-input['lambda'] = ('Wellenlänge', (1, 7.5, 14), 'µm')
-input['T'] = ('Temperatur', (250, 325, 400), 'K')
-
-# Diagramm: Größe auf der x-Achse
-plotX = 'lambda'
-
-# --- Modellberechnung ---
-import numpy as np    # init
-
-def calculate(Q_, var, opt):    # init
-    # Konstanten
-    #   c = Q_(value, 'unit')
-    c1L = Q_(1.191e-16, 'W*m^2/sr')
-    c2  = Q_(0.014388, 'm*K')
-
-    # Gleichung bzw. Algorithmus
-    return c1L / np.power(var['lambda'], 5) / np.expm1(c2/var['lambda']/var['T'])
+def piecewise(function, var, keys):
+    """Iteriere 'function' über abschnittsweise definierte Variablen namens 'keys'"""
+    import itertools
+    ndvars = [np.atleast_1d(var[k_]) for k_ in keys]    # make iterable objects
+    length = max(len(n_) for n_ in ndvars)    # max. number of values
+    ndvars = [np.resize(n_, length) for n_ in ndvars]    # fill up small array with repeated copies
+    array = np.array([])
+    for v_ in itertools.zip_longest(*ndvars):
+        array = np.append(array, function(var, *v_))
+    return array

@@ -24,9 +24,9 @@
 # ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 # OTHER DEALINGS IN THE SOFTWARE.
 
-c, input = {}, {}    # init
+input, option = {}, {}    # init
 
-# Modellbeschreibung:
+# --- Modellbeschreibung ---
 # Titel, Beschreibung (in Markdown), Autor/Kontakt, Version
 title = 'Biegebalken'
 description = """
@@ -35,38 +35,68 @@ Voraussetzungen (Bernoullische Annahmen):
 * schubstarrer, schlanker Balken (Die Länge ist wesentlich größer als die Querschnittsabmessungen)
 """
 author = 'Universität des Saarlandes'
-version = '0.1'
+version = '0.2'
 
-# Ein- und Ausgabe:
+# --- Ein- und Ausgabe ---
+# Name Ausgabewert(e) (y-Wert)
+#   option['output'] = ('name', …)
+option['output'] = ('Durchbiegung', 'Max. Biegespannung')
+
+option['Last'] = ('Gleichlast', 'Einzellast')
+
 # Eingabewerte mit Name, Minimum, Maximum und physik. Einheit
 #   input['x'] = ('name', (min value, …, max value), 'unit')
 input['l'] = ('Länge',                  (1, 2, 3), 'm')
 input['x'] = ('Position',               (0, 0.5, 1), '')
-input['q'] = ('Gleichlast',             (2000, 1500, 1000), 'N/m')
-input['E'] = ('Elastizitätsmodul',      (70, 140, 210), 'GPa')
+input['q'] = ('Gleichlast',             (2000, 1500, 1000), 'N/m', 'Gleichlast')
+input['F'] = ('Einzellast',             (2000, 1500, 1000), 'N', 'Einzellast')
+input['a'] = ('Position der Last',      (0.25, 0.5, 0.75), '', 'Einzellast')
 input['I'] = ('Flächenträgheitsmoment', (108), 'cm^4')
-input['z'] = ('Halbe Balkendicke',      (3), 'cm')
-
-# Name Ausgabewert(e) (y-Wert)
-#   output = ('name', …)
-output = ('Durchbiegung', 'Max. Biegespannung')
+input['E'] = ('Elastizitätsmodul',      (70, 140, 210), 'GPa', option['output'][0])
+input['z'] = ('Halbe Balkendicke',      (3), 'cm', option['output'][1])
 
 # Diagramm: Größe auf der x-Achse
 plotX = 'x'
 
-# Konstanten
-#   c['x'] = (value, 'unit')
-
-# Modellberechnung:
+# --- Modellberechnung ---
 import numpy as np    # init
+import model.f_helper as hp    # helper functions
 
-def calculate(c, var, out):    # init
-    if out == output[0]:
-        # Durchbiegung
+def calculate(Q_, var, opt):    # init
+    # Konstanten
+    #   c = Q_(value, 'unit')
+
+    # Gleichung bzw. Algorithmus
+    if opt['output'] == 'Durchbiegung':
         EI = var['E'] * var['I']    # Biegesteifigkeit
-        k = var['q'] * np.power(var['l'], 4) / EI / 24
-        return -k * (var['x'] - 2*np.power(var['x'],3) + np.power(var['x'],4))
     else:
-        # Maximale Biegespannung (in der Randfaser)
-        My = var['q'] / 2 * np.power(var['l'],2) * (var['x'] - np.power(var['x'],2))
-        return My / var['I'] * var['z']
+        W = var['I'] / var['z']    # Widerstandsmoment (z= Abstand Randfaser zu neutraler Faser)
+    
+    if opt['Last'] == 'Gleichlast':
+        if opt['output'] == 'Durchbiegung':
+            k = var['q'] * np.power(var['l'], 4) / EI / 24
+            return -k * (var['x'] - 2*np.power(var['x'],3) + np.power(var['x'],4))
+        else:
+            # Maximale Biegespannung (in der Randfaser)
+            My = var['q'] / 2 * np.power(var['l'],2) * (var['x'] - np.power(var['x'],2))
+            return My / W
+    elif opt['Last'] == 'Einzellast':
+        if opt['output'] == 'Durchbiegung':
+            k = var['F'] * np.power(var['l'], 3) * var['a'] * (1-var['a']) / EI / 6
+            return -k * hp.piecewise(f1_Einzellast, var, ('a', 'x'))
+        else:
+            # Maximale Biegespannung (in der Randfaser)
+            My = var['F'] * var['l'] * hp.piecewise(f2_Einzellast, var, ('a', 'x'))
+            return My / W
+
+def f1_Einzellast(_, a, x):
+    if a < x <= 1:
+        a = 1 - a
+        x = 1 - x
+    return (2-a)*x - np.power(x,3)/a
+
+def f2_Einzellast(_, a, x):
+    if a < x <= 1:
+        a = 1 - a
+        x = 1 - x
+    return (1-a) * x
