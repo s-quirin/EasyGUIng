@@ -20,8 +20,8 @@
 __Name__ = 'EasyGUIng'
 __Comment__ = 'A GUI building tool for your mathematic model'
 __Author__ = 's-quirin'
-__Version__ = '0.0.2'
-__Date__ = '2023-03-24'
+__Version__ = '0.0.3'
+__Date__ = '2023-08-07'
 __License__ = 'LGPL-3.0-or-later'
 __Source__ = 'https://github.com/s-quirin/EasyGUIng'
 
@@ -35,17 +35,18 @@ SPACING = 12    # spacing between description box and calc/plot box
 MODEL_FOLDER = 'model'
 
 """Init"""
-# Get all model file paths (.py files in MODEL_FOLDER)
+import logging
 import sys
 from pathlib import Path
-if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
-    # running in an executable bundle
+# running in an executable bundle (True) or in a normal Python process (False)
+EXECUTABLE_BUNDLE = getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS')
+if EXECUTABLE_BUNDLE:
     DIRECTORY = Path(sys.executable).parent    # directory of executable
     # BUG: bugfixes and improvements for executables:
     import matplotlib.backends.backend_pdf    # make the 'Save the figure -> pdf' work
 else:
-    # running in a normal Python process
     DIRECTORY = Path(__file__).parent    # script directory
+# Get all model file paths (.py files in MODEL_FOLDER)
 g_modeldir = Path(DIRECTORY, MODEL_FOLDER)
 g_modelpath_gen = g_modeldir.glob('*.py')   # is generator (from .glob) -> use only once
 
@@ -67,21 +68,28 @@ import numpy as np
 # Physical quantities
 import pint
 ureg = pint.UnitRegistry()
+ureg.autoconvert_offset_to_baseunit = True    # °C input without OffsetUnitCalculusError
+# See https://pint.readthedocs.io/en/stable/user/nonmult.html for guidance.
 ureg.setup_matplotlib()    # https://pint.readthedocs.io/en/stable/plotting.html
 ureg.default_format = '~P'    # f'{u:~P}' pint short pretty
+ureg.mpl_formatter = '{:~P}'    # pint short pretty for matplotlib
 Q_ = ureg.Quantity
 
 # globals
 g_library_infos = ['Qt ' + qtc.QLibraryInfo.version().toString(),
     'Matplotlib ' + mpl.__version__,
     'Pint ' + pint.__version__]
+g_mainWindow = None    # pointer to the main window
 
 class MainWindow(qtw.QMainWindow):
     """GUI Window"""
     def __init__(self):
         super().__init__()
+        global g_mainWindow
+        g_mainWindow = self
         # self.setLocale(qtc.QLocale.German)    # decimal seperators are English!
         self.setWindowTitle(__Name__ + ' ' + __Version__)
+        self.statusBar()    # init status bar
         self.setCentralWidget(MainWidget())
 
 class MainWidget(qtw.QTabWidget):
@@ -97,7 +105,7 @@ class MainWidget(qtw.QTabWidget):
         aboutBtn = qtw.QPushButton('?', toolTip='Über')
         aboutBtn.setFixedSize(saveBtn.sizeHint())
         aboutBtn.clicked.connect(self.on_aboutBtn_clicked)
-        
+
         box = qtw.QWidget()
         boxLayout = qtw.QHBoxLayout(box)
         boxLayout.addWidget(saveBtn)
@@ -111,12 +119,18 @@ class MainWidget(qtw.QTabWidget):
             if name[:2] == 'f_':
                 # skip helper functions
                 continue
-            model = SourceFileLoader(name, str(p_)).load_module()
-            self.addTab(PageWidget(model, name), name)
+            try:
+                model = SourceFileLoader(name, str(p_)).load_module()
+                widget = PageWidget(model, name)
+            except Exception as ex:
+                error(f'Error in {name}:\n{type(ex).__name__}: {ex}')
+            else:
+                self.addTab(widget, name)
         if self.count() == 0:
-            error(self, 'No models were found.')
-            msg = f' No models found in\n {g_modeldir} \n Check directory for .py files.'
-            self.addTab(qtw.QLabel(msg), 'Error')
+            error('No models loaded.')
+            text = f' No models loaded from \n {g_modeldir} \n Check directory for .py files.'
+            # whitespaces for left and right padding
+            self.addTab(qtw.QLabel(text), 'Error')
             return
         self.existingPlots = [False] * self.count()
         self.on_tab_changed(self.currentIndex())    # fill the first tab
@@ -124,7 +138,8 @@ class MainWidget(qtw.QTabWidget):
         saveBtn.setEnabled(True)
         self.show()    # BUG: sometimes doesn't work on startup without this
 
-    def on_tab_changed(self, index):
+    def on_tab_changed(self, index: int):
+        g_mainWindow.statusBar().clearMessage()
         if not self.existingPlots[index]:
             self.widget(index).calc()    # do point calculation on current tab
             self.widget(index).outputPlot.plot()    # do the plot on current tab
@@ -173,9 +188,9 @@ class MainWidget(qtw.QTabWidget):
 class PageWidget(qtw.QWidget):
     """A tab in the MainWidget containing all about the model"""
     class ValidModel():
-        def __init__(self, model, name):
+        def __init__(self, model, name: str):
             self.name = name
-            
+
             # Optional
             self.title = str(getattr(model, 'title', name))
             self.description = str(getattr(model, 'description', ''))
@@ -194,33 +209,32 @@ class PageWidget(qtw.QWidget):
                 else:
                     self.option[k_] = tuple([str(i_) for i_ in v_])         
 
-    def __init__(self,  model, name):
+    def __init__(self, model, name: str):
         super().__init__()
         model = self.ValidModel(model, name)    # check model integrity
         self.model = model
-        
+
         # Get vars from model
-        self.inputNames, qtys, self.inputForOption, self.option = {}, {}, {}, {}
+        self.inputNames, qtys, self.inputForOption = {}, {}, {}
         for k_, v_ in model.input.items():
             # input['x'] = ('name', (min value, ..., max value), 'unit', output)
             self.inputNames[k_] = str(v_[0])
-            if type(v_[1]) is not tuple:
-                qtys[k_] = [Q_(v_[1], v_[2])]    # a single entry is not a tuple
-            else:
-                qtys[k_] = [Q_(val, v_[2]) for val in v_[1]]
+            qtys[k_] = np.atleast_1d(Q_(v_[1], v_[2]))    # makes single entries iterable too
             if len(v_) > 3:
                 if type(v_[3]) is tuple:
                     self.inputForOption[k_] = v_[3]
                 else:
-                    self.inputForOption[k_] = (v_[3],)    # tuple with one item
-        for k_ in model.option:
-            self.option[k_] = model.option[k_][0]
+                    # a single entry is not a tuple, so make a tuple with one item
+                    self.inputForOption[k_] = (v_[3],)
+        # first entry of (min value, ..., max value) sets unit
+        self.qtysUnit = dict((k_, qtys[k_].dimensionality) for k_ in qtys)
+        self.option = dict((k_, model.option[k_][0]) for k_ in model.option)
         self.plotX = model.plotX
         self.calcModel = model.calculate
 
         # Description
         descBoxLayout = qtw.QVBoxLayout()
-        
+
         headLayout = qtw.QHBoxLayout()
         label = qtw.QLabel('<h2>' + model.title + '</h2>')
         headLayout.addWidget(label)    # title
@@ -232,6 +246,8 @@ class PageWidget(qtw.QWidget):
         label = qtw.QTextBrowser()
         label.setMarkdown(model.description)
         label.setStyleSheet('QTextBrowser {border: 1px solid lightgrey}')
+        label.setSizePolicy(qtw.QSizePolicy.Expanding, qtw.QSizePolicy.Preferred)
+        # default sizePolicy for QTextBrowser: Expanding
         descLayout.addWidget(label)    # description
         self.image = None
         self.getImage()    # try to load an image
@@ -242,6 +258,10 @@ class PageWidget(qtw.QWidget):
         descBoxLayout.addLayout(descLayout)
 
         # Input/Output
+        validator = qtg.QRegularExpressionValidator('[^,]*', self)
+        """Do not allow commas"""
+        # [^]: any char but, *: any times (empty -> setText(placeholderText()))
+
         for k_, v_ in model.option.items():
             if k_ != 'output' and len(v_) > 1:
                 box = qtw.QComboBox(toolTip=k_)
@@ -253,13 +273,17 @@ class PageWidget(qtw.QWidget):
         self.calcBoxLayout = qtw.QFormLayout(calcBox)
         self.calcInputs = {}
         for k_, v_ in qtys.items():
-            mean = (v_[0] + v_[-1]) / 2    # also works with single entry
+            mean = np.mean((np.min(v_.magnitude), np.max(v_.magnitude)))
+            mean = Q_(np.round(mean, decimals=14), v_.units)    # truncate double precision
             ed = qtw.QLineEdit(f'{mean}', toolTip=k_)
+            ed.setPlaceholderText(f'{mean}')
+            ed.setClearButtonEnabled(True)
             ed.setMinimumWidth(MIN_EDIT_WIDTH)
+            ed.setValidator(validator)
             ed.editingFinished.connect(self.on_calcEdit_finished)
             self.calcInputs[k_] = ed
             self.calcBoxLayout.addRow(self.inputNames[k_], ed)    # label: 'name'
-        
+
         line = qtw.QFrame(frameShape=qtw.QFrame.HLine)
         line.setStyleSheet('QFrame {color: lightgrey}')
         self.calcBoxLayout.addRow(line)
@@ -276,7 +300,7 @@ class PageWidget(qtw.QWidget):
         self.plotCalc = qtw.QCheckBox(tristate=True)
         self.plotCalc.setToolTip('Markiere und beschrifte den berechneten Wert')
         self.plotCalc.stateChanged.connect(self.on_plotCalc_stateChanged)
-        
+
         calcLayout = qtw.QHBoxLayout()
         calcLayout.addWidget(outputLineLabel)
         calcLayout.addWidget(outputCombo)
@@ -293,11 +317,12 @@ class PageWidget(qtw.QWidget):
             ed.setPlaceholderText(text)
             ed.setClearButtonEnabled(True)
             ed.setMinimumWidth(MIN_EDIT_WIDTH)
+            ed.setValidator(validator)
             ed.editingFinished.connect(self.on_plotEdit_finished)
             ed.returnPressed.connect(self.on_plotEdit_returnPressed)
             self.plotInputs[k_] = ed
             self.plotBoxLayout.addRow(self.inputNames[k_], ed)    # label: 'name'
-        
+
         line = qtw.QFrame(frameShape=qtw.QFrame.HLine)
         line.setStyleSheet('QFrame {color: lightgrey}')  
         self.plotBoxLayout.addRow(line)
@@ -306,8 +331,9 @@ class PageWidget(qtw.QWidget):
         self.plotXCombo.addItems(self.inputNames.values())
         self.plotXCombo.setCurrentText(self.inputNames[self.plotX])
         self.plotXCombo.currentIndexChanged.connect(self.on_plotXCombo_changed)
-        self.plotNumOfPts = qtw.QSpinBox(toolTip='Datenpunkte', minimum=2, maximum=1001)
+        self.plotNumOfPts = qtw.QSpinBox(toolTip='Datenpunkte', minimum=2, maximum=10001)
         self.plotNumOfPts.setValue(NUM_OF_DATAPOINTS)
+        self.plotNumOfPts.setAlignment(qtc.Qt.AlignRight)
         self.plotNumOfPts.setKeyboardTracking(False)    # do not emit signals while typing
         self.plotNumOfPts.valueChanged.connect(self.plot_updatePending)
         plotNumOfPtsLabel = qtw.QLabel('Punkte')
@@ -317,16 +343,17 @@ class PageWidget(qtw.QWidget):
         self.plotMax = qtw.QCheckBox('Max.', tristate=True)
         self.plotMax.setToolTip('Markiere und beschrifte das erste Maximum')
         self.plotMax.stateChanged.connect(self.plot_updatePending)
-        
+
         # Input/Output: Plot
         self.plotBtn_icons = (self.style().standardIcon(qtw.QStyle.SP_BrowserReload),
                               self.style().standardIcon(qtw.QStyle.SP_BrowserStop))
         self.plotBtn = qtw.QPushButton(self.plotBtn_icons[0], '', toolTip='Zeichne')
         self.plotBtn.setDefault(True)
         self.plotBtn.clicked.connect(self.on_plotBtn_clicked)
-        
+
         plotStateOkay = qtw.QLabel('✔', styleSheet='QLabel {color: green;}')
         plotStateChgd = qtw.QLabel(' !', styleSheet='QLabel {color: DarkOrange; font-weight:bold;}')
+        plotStateChgd.setToolTip('Änderungen ausstehend')
         svg_str = '''
         <svg version="1.1" xmlns="http://www.w3.org/2000/svg"
         width="8px" height="16px" viewBox="0 0 8 16">
@@ -374,23 +401,45 @@ class PageWidget(qtw.QWidget):
         layout.addLayout(sublayout)
         layout.addWidget(self.outputPlot)
 
-    def plot_isBusy(self, isBusy):
-        i_ = int(isBusy==True)    # bool to int
-        self.plotBtn.setEnabled(not isBusy)
-        self.plotBtn.setIcon(self.plotBtn_icons[i_])
-        self.plotState.setCurrentIndex(i_)
+        self.calcInputQtys = self.checkInputs(self.calcInputs)
+        """Dict entries consist of a list with one quantity Q_"""
+        self.plotInputQtys = self.checkInputs(self.plotInputs)
+        """Dict entries consist of a list with all quantities Q_"""
 
-    def plot_updatePending(self):
-        self.plotState.setCurrentIndex(2)    # set QStackedWidget
-    
+    def checkInputs(self, inputs: dict):
+        r_ = {}
+        for k_, v_ in inputs.items():
+            texts = [s_.strip() for s_ in v_.text().split(';')]    # input delimiter: ;
+            # split always returns a list, strip removes leading/trailing spaces
+            r_[k_] = [Q_(s_) for s_ in texts if s_ != '']    # ignore empty entries
+            if all(q_.dimensionality == self.qtysUnit[k_] for q_ in r_[k_]):
+                self.plotBtn.setEnabled(True)
+                g_mainWindow.statusBar().clearMessage()
+            else:
+                self.plotBtn.setEnabled(False)
+                raise DimensionalityException(f'{k_}: [{v_.text()}]')
+        if not self.plotX:
+            self.plotBtn.setEnabled(False)
+        return r_
+
     def calc(self):
-        qty = {}
-        for k_, v_ in self.calcInputs.items():
-            qty[k_] = Q_(v_.text())
+        qty = dict((k_, q_[0]) for k_, q_ in self.calcInputQtys.items())
         y = self.calc_series(None, qty, self.option)
-        y = y.item()    # possible 1d ndarray to Python scalar
+        y = y.item()    # possible 1d ndarray to scalar
         self.calcPoint = (qty , y)    # with all possible x values
         self.outputLine.setText(f'{y:.9g~P}')
+
+    def calc_series(self, x, qty: dict, opt: dict):
+        """Pass a normalized data series (control variable x, parameters) to the model"""
+        qty = dict((k_, q_.to_base_units()) for k_, q_ in qty.items())
+        if self.plotX:
+            qty[self.plotX] = np.atleast_1d(qty[self.plotX]) if x is None else x.to_base_units()
+        # control variable is always an array that can be indexed
+        result = self.calcModel(Q_, qty, opt)
+        if not isinstance(result, Q_):
+            # e.g. in case of dimensionless exponential operations y is float or numpy.ndarray
+            result = Q_(result)
+        return result
 
     def getImage(self):
         """Get image corresponding to model.name and optional numbering from option"""
@@ -408,14 +457,14 @@ class PageWidget(qtw.QWidget):
                     break
             validNums.append(num)
         num = max(validNums, key=len) if validNums else ''    # get most specific numbering
-        
+
         # get file or return
         file = Path(g_modeldir, self.model.name + num)
         svgAvailable = Path(file,'.svg').exists()
         pixmap = qtg.QPixmap(file)    # loader guesses the image file format
         if not svgAvailable and pixmap.isNull():
             return
-        
+
         if not self.image:
             # create image widget if necessary
             self.image = qts.QSvgWidget() if svgAvailable else qtw.QLabel()
@@ -427,6 +476,16 @@ class PageWidget(qtw.QWidget):
             if pixmap.height() > MAX_IMAGE_HEIGHT:
                 pixmap = pixmap.scaledToHeight(MAX_IMAGE_HEIGHT, qtc.Qt.SmoothTransformation)
             self.image.setPixmap(pixmap)
+
+    def plot_isBusy(self, isBusy: bool):
+        i_ = int(isBusy==True)    # bool to int
+        self.plotBtn.setEnabled(not isBusy)
+        self.plotBtn.setIcon(self.plotBtn_icons[i_])
+        self.plotState.setCurrentIndex(i_)
+
+    def plot_updatePending(self):
+        self.plotInputQtys = self.checkInputs(self.plotInputs)
+        self.plotState.setCurrentIndex(2)    # set QStackedWidget
 
     def update_rowVisibility(self):
         self.inputRelevance = {}
@@ -441,12 +500,20 @@ class PageWidget(qtw.QWidget):
             if not v_ and self.plotXCombo.currentIndex() == i_:
                 self.plotXCombo.setCurrentIndex(-1)    # reset to no item set
             self.plotXCombo.model().item(i_).setEnabled(v_)
+            # BUG fix for Qt >= 6.5(.1): there is no visualization of disabled entries
+            font = self.plotXCombo.model().item(i_).font()
+            font.setItalic(not v_)
+            self.plotXCombo.model().item(i_).setFont(font)
 
     def on_calcEdit_finished(self):
+        ed = self.sender()
+        if not ed.text():
+            ed.setText(ed.placeholderText())    # fill with default values
+        self.calcInputQtys = self.checkInputs(self.calcInputs)
         self.calc()
         self.on_plotCalc_stateChanged(self.plotCalc.checkState())
 
-    def on_optionCombos_changed(self, text):
+    def on_optionCombos_changed(self, text: str):
         k_ = self.sender().toolTip()
         self.option[k_] = text
         self.getImage()
@@ -458,7 +525,8 @@ class PageWidget(qtw.QWidget):
             self.plot_updatePending()
 
     def on_plotCalc_stateChanged(self, state):
-        state = self.plotCalc.checkState()    # BUG of Pyside6: state is int instead of object
+        # BUG of Pyside6: stateChanged state is int instead of CheckState object
+        state = self.plotCalc.checkState()
         self.outputPlot.markCalculation(state)    # does not replot lines
         self.outputPlot.ax.figure.canvas.draw()
 
@@ -467,26 +535,17 @@ class PageWidget(qtw.QWidget):
         if not ed.text():
             ed.setText(ed.placeholderText())    # fill with default values
         self.plot_updatePending()
-    
+
     def on_plotEdit_returnPressed(self):
         self.on_plotBtn_clicked()
 
-    def on_plotXCombo_changed(self, index):
+    def on_plotXCombo_changed(self, index: int):
         self.plotX = list(self.inputNames.keys())[index] if index != -1 else ''
         self.plot_updatePending()
 
     def on_plotBtn_clicked(self):
         if self.plotX:
             self.outputPlot.plot()
-    
-    def calc_series(self, x, qty, opt):
-        """Pass a normalized data series (control variable x, parameters) to the model"""
-        qty = qty.copy()    # changes are only for normalized calculation
-        for k_ in qty:
-            qty[k_] = qty[k_].to_base_units()
-        if x is not None:
-            qty[self.plotX] = x.to_base_units()    # pint array using numpy
-        return self.calcModel(Q_, qty, opt)
 
 class ModelPlot(qtw.QWidget):
     """The plot part of the model's GUI"""
@@ -514,14 +573,16 @@ class ModelPlot(qtw.QWidget):
                     p_.result = self.ref.parent().calc_series(p_.x, p_.qty, p_.opt)
             self.signals.completed.emit()
 
-    def __init__(self, parent):
+    def __init__(self, parent: qtw.QWidget):
         super().__init__(parent)
 
         layout = qtw.QVBoxLayout(self)
         px = 1/plt.rcParams['figure.dpi']  # pixel in inches
         # figsize: Figure dimension (width, height) in inches
-        fig = plt.figure(figsize=(600*px, 400*px))
+        fig = plt.figure(figsize=(600*px, 400*px), layout='constrained')
         canvas = FigureCanvas(fig)
+        canvas.setSizePolicy(qtw.QSizePolicy.Expanding, qtw.QSizePolicy.Expanding)
+        # default sizePolicy for FigureCanvas: Preferred
         self.ax = canvas.figure.subplots()
         
         # https://matplotlib.org/stable/gallery/user_interfaces/embedding_in_qt_sgskip.html
@@ -540,28 +601,38 @@ class ModelPlot(qtw.QWidget):
 
     def plot(self):
         """Plot with simple threading for responsive GUI"""
-        parent = self.parent()
-        parent.plot_isBusy(True)
+        self.parent().plot_isBusy(True)
+        try:
+            self.plot_pre()
+        except Exception as ex:
+            error(str(ex))
+            self.parent().plot_isBusy(False)
+        else:
+            worker = ModelPlot.CalcWorker(self)
+            worker.signals.completed.connect(self.plot_post)
+            qtc.QThreadPool.globalInstance().start(worker)
 
+    def plot_pre(self):
+        """Plot preparation"""
+        parent = self.parent()
         self.legendKeys = []
         family, qty = {}, {}
-        for k_, v_ in parent.plotInputs.items():
+        for k_, q_ in parent.plotInputQtys.items():
             if not parent.inputRelevance.get(k_, True):
                 continue
-            # persistent and visible optional inputs (see update_rowVisibility)
-            texts = v_.text().split(';')    # input delimiter, split always returns a list
-            texts = [s_.strip() for s_ in texts]    # remove leading and trailing spaces
+            # persistent and visible optional inputs (see update_rowVisibility):
             if k_ == parent.plotX:
-                x = np.linspace(Q_(texts[0]), Q_(texts[-1]), parent.plotNumOfPts.value())
-            elif len(set(texts)) == 1:
-                qty[k_] = Q_(texts[0])    # k_ not containing different values
+                x = np.linspace(q_[0], q_[-1], parent.plotNumOfPts.value())
+            elif len(set(q_)) == 1:
+                family[k_] = [q_[0]]    # k_ not containing different values
             else:
-                family[k_] = texts
+                family[k_] = q_
                 self.legendKeys.append(k_)
 
         numOfPlots = 1
         if family:
-            numOfPlots = min([len(v_) for v_ in family.values()])    # shortest family
+            # shortest family containing different values
+            numOfPlots = min([len(v_) for v_ in family.values() if len(v_) > 1])
 
         if numOfPlots <= len(self.plots):
             self.plots = self.plots[:numOfPlots]    # shorten or keep list
@@ -571,7 +642,10 @@ class ModelPlot(qtw.QWidget):
         for n_, p_ in enumerate(self.plots):
             # update plots if necessary
             for f_ in family:
-                qty[f_] = Q_(family[f_][n_])
+                if len(family[f_]) == 1:
+                    qty[f_] = family[f_][0]
+                else:
+                    qty[f_] = family[f_][n_]
             same = True if p_ else False
             same = np.equal(p_.opt, opt).all() if same else False    # opt equal
             same = np.equal(p_.qty, qty).all() if same else False    # qty equal
@@ -580,37 +654,32 @@ class ModelPlot(qtw.QWidget):
             if not same:
                 self.plots[n_] = ModelPlot.PlotData(x, qty.copy(), opt.copy())
 
-        # Threading
-        worker = ModelPlot.CalcWorker(self)
-        worker.signals.completed.connect(self.plot_post)
-        qtc.QThreadPool.globalInstance().start(worker)
-        
     def plot_post(self):
         """Continue plot()"""
-        parent = self.parent()        
+        parent = self.parent()
         self.ax.clear()    # clear old plots
+
         try:
             for p_ in self.plots:
                 self.ax.plot(p_.x, p_.result, '-', label=self.legendText(p_.qty))
         except Exception as ex:
-            msg = f'Fehler in Modellrückgabe:\n{type(ex).__name__}: {ex}'
-            error(self, msg)
+            error(f'Fehler in Modellrückgabe:\n{type(ex).__name__}: {ex}')
         else:
+            self.ax.set_xlabel(f"{self.parent().plotX} ({self.ax.xaxis.get_units()})")
+            self.ax.set_ylabel(f"{self.parent().option['output']} ({self.ax.yaxis.get_units()})")
             if self.legendKeys:
                 self.ax.legend()
-            self.markExtremum((parent.plotMin.checkState(), parent.plotMax.checkState()))
+            self.markExtremum(parent.plotMin.checkState(), parent.plotMax.checkState())
             self.markCalculation(parent.plotCalc.checkState())
-            # fits plot within figure cleanly and allows to modify borders afterwards
-            self.ax.figure.tight_layout()
         finally:
             self.ax.figure.canvas.draw()
             parent.plot_isBusy(False)
-    
-    def legendText(self, dictionary):
+
+    def legendText(self, dictionary: dict):
         texts = [f'{v_}' for k_, v_ in dictionary.items() if k_ in self.legendKeys]
         return ', '.join(texts)
-    
-    def markExtremum(self, markMinMax):
+
+    def markExtremum(self, *markMinMax: qtc.Qt.CheckState):
         gid = 'extrema'    # gid: custom id
         if set(markMinMax) == set([qtc.Qt.Unchecked]):    # all Unchecked
             return
@@ -631,7 +700,7 @@ class ModelPlot(qtw.QWidget):
             label = '_' + gid + str(i_)    # label=_ does not show up in legend
             self.ax.plot(x, y, linestyle='', marker=7-i_, color='red', label=label, gid=gid)
 
-    def markCalculation(self, mark):
+    def markCalculation(self, mark: qtc.Qt.CheckState):
         gid = 'calc'    # gid: custom id
         # reset marker
         if self.ax.lines[-1].get_gid() == gid:
@@ -651,7 +720,7 @@ class ModelPlot(qtw.QWidget):
         if mark == qtc.Qt.Checked:
             self.overlay = self.labelPoint((x.magnitude, y.magnitude), 'center')
 
-    def labelPoint(self, point, align):
+    def labelPoint(self, point: tuple, align: str):
         """Annotate point's location"""
         point_str = [f'{p_:g}' for p_ in point]
         text = '(' + point_str[0] + ', ' + point_str[1] + ')'
@@ -660,7 +729,7 @@ class ModelPlot(qtw.QWidget):
                     horizontalalignment='center', verticalalignment=align,
                     )
 
-def htmlTable(table):
+def htmlTable(table: tuple):
     """Convert tuple of tuples for row and column into html representation"""
     text = ''
     for row in table:
@@ -675,13 +744,33 @@ def htmlTable(table):
         text += '</tr>'
     return '<table>' + text + '</table>'
 
-def error(parent, message):
-    print(message)
-    qtw.QMessageBox.critical(parent, 'Error', message)
+class DimensionalityException(Exception):
+    def __init__(self, units):
+        self.units = units
+        self.message = f'Inkompatible Einheit:\n{units}'
+        # logging is already done automatically
+        g_mainWindow.statusBar().showMessage(f'Fehler: {self.message}')
+        qtw.QMessageBox.critical(qtw.QApplication.activeWindow(), 'Fehler', self.message)
+    def __str__(self):
+        return str(self.units)
+
+def error(message: str):
+    logging.error(message)
+    g_mainWindow.statusBar().showMessage(f'Fehler: {message}')
+    qtw.QMessageBox.critical(qtw.QApplication.activeWindow(), 'Error', message)
 
 if __name__ == '__main__':
-    print('Debug Window')    # TODO: Console window is only for debugging
     app = qtw.QApplication()
-    window = MainWindow()
-    window.show()
-    app.exec() 
+    if EXECUTABLE_BUNDLE:
+        # TODO: For Debugging keep console window open
+        print('Debug Window\nClosing terminates the programme.\n')
+        try:
+            window = MainWindow()
+            window.show()
+        except Exception as ex:
+            logging.exception(ex)
+            print('\nClose the console window to terminate.')
+    else:
+        window = MainWindow()
+        window.show()
+    app.exec()

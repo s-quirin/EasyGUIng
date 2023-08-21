@@ -29,31 +29,44 @@ input, option = {}, {}    # init
 # --- Modellbeschreibung ---
 # Titel, Beschreibung (in Markdown), Autor/Kontakt, Version
 title = 'Plancksches Strahlungsgesetz'
-description = 'Berechnung der spektralen Strahldichte'
+description = """
+Berechnung der spektralen Strahldichte L_λ und Berechnung der Strahldichte L
+in Form des Integrals über L_λ
+"""
 author = 'Universität des Saarlandes'
-version = '0.1'
+version = '0.2'
 
 # --- Ein- und Ausgabe ---
 # Name Ausgabewert(e) (y-Wert)
 #   option['output'] = ('name', …)
-option['output'] = ('Spektrale Strahldichte')
+option['output'] = ('Spektrale Strahldichte', 'Strahldichte')
 
 # Eingabewerte mit Name, Minimum, Maximum und physik. Einheit
 #   input['x'] = ('name', (min value, …, max value), 'unit')
-input['lambda'] = ('Wellenlänge', (1, 7.5, 14), 'µm')
+input['λ'] = ('Wellenlänge', (1, 7.5, 14), 'µm', 'Spektrale Strahldichte')
+input['F_0'] = ('Integration Start', (1, 3, 8), 'µm', 'Strahldichte')
+input['F_1'] = ('Integration Ende', (3, 5, 14), 'µm', 'Strahldichte')
 input['T'] = ('Temperatur', (250, 325, 400), 'K')
 
 # Diagramm: Größe auf der x-Achse
-plotX = 'lambda'
+plotX = 'λ'
 
 # --- Modellberechnung ---
 import numpy as np    # init
+import model.f_helper as hp    # helper functions
 
 def calculate(Q_, var, opt):    # init
-    # Konstanten
-    #   c = Q_(value, 'unit')
-    c1L = Q_(1.191e-16, 'W*m^2/sr')
-    c2  = Q_(0.014388, 'm*K')
+
+    def Plancks_Law(var):
+        # Konstanten
+        #   c = Q_(value, 'unit')
+        # Planck-Konstanten (Festlegung nach CODATA 2018)
+        c1L = Q_(2 * 6.62607015e-34 * 299792458**2, 'W*m^2/sr')    # c1L = 2*h*c^2
+        c2  = Q_(6.62607015e-34 * 299792458 / 1.380649e-23, 'm*K')    # c2 = h*c/k
+        return c1L / var['λ']**5 / np.expm1(c2/var['λ']/var['T'])
 
     # Gleichung bzw. Algorithmus
-    return c1L / np.power(var['lambda'], 5) / np.expm1(c2/var['lambda']/var['T'])
+    if opt['output'] == 'Spektrale Strahldichte':
+        return Plancks_Law(var)
+    else:
+        return hp.integrate(Plancks_Law, var, {'λ':'m', 'T':'K'})

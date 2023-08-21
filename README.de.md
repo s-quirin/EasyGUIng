@@ -8,9 +8,17 @@
 
 # EasyGUIng
 ## Ein Framework zur Bereitstellung mathematischer Modelle mit Benutzeroberfläche
+
 >Modell und GUI sind einfach zu erstellen für den Fachexperten und einfach zu nutzen für den Endanwender.
 
-<img src="doc/Screenshot_model.png" alt="Code Ausschnitt" title ="Code des Modells" width="500"/>
+Stärken Sie die Eigenständigkeit Ihrer Fachabteilung durch unkomplizierte Python-Programmierung mit weniger Code. Sparen Sie sich die Einführung einer Low-Code-Plattform und bleiben Sie frei und unabhängig.
+
+Als Beispiel der notwendige Code für einen Bernoulli Biegebalken:
+
+<img src="doc/Screenshot_model.png" alt="Code Ausschnitt" title ="Code des Modells" width="500" style="margin-bottom:1em"/>
+
+Nach einem Neustart der Anwendung erhalten Sie diese vom Framework generierte Benutzeroberfläche:
+
 <img src="doc/Screenshot.png" alt="Benutzeroberfläche" title ="GUI des Modells" width="500"/>
 
 ## Ziele
@@ -20,6 +28,12 @@
   - Die Verteilung ist unkompliziert und wird nicht durch Lizenzen limitiert.
 - [x] Beliebige Komplexität der mathematischen Modelle und vollständige Freiheit in der Umsetzung
   - analytisch, numerisch, Machine Learning etc.
+
+## Enthaltene (analytische) Beispielmodelle
+- Bernoulli Biegebalken
+- Feder-Dämpfersystem
+- Plancksches Strahlungsgesetz
+- Lambert-beersches Gesetz
 
 ## Installation
 Eine *Installation* ist nicht notwendig. Laden Sie sich eine [Release-Version](https://github.com/s-quirin/EasyGUIng/releases) herunter, entpacken sie und starten die enthaltene `EasyGUIng.exe`. Erstellen Sie mit [dieser Anleitung](#modellerstellung) direkt Ihr eigenes Modell.
@@ -39,7 +53,7 @@ Unterstützung bei der Installation und bei der Implementierung Ihres Modells er
 1) Füllen Sie zur Modellbeschreibung Titel, Beschreibung, Autor/Kontakt und Version mit Ihren anzuzeigenden Daten.
     >Tipp: Für `description` können Sie die Auszeichnungssprache [Markdown](https://de.wikipedia.org/wiki/Markdown) verwenden.
 1) `option` listet mögliche Auswahlwerte. `option['output']` bezeichnet dabei die möglichen Werte für die Ausgabe (y-Werte).
-    >Tipp: Erklärende Grafiken können abhängig von `option` angezeigt werden (max. 9 verschiedene je `option`), indem Sie mehrere Grafiken `Kurztitel011.svg`, `Kurztitel021.svg` etc. hinterlegen. Die Position der Ziffern beschreibt die `option`, die Ziffer selbst die Auswahl. Eine `0` (hier an erster Stelle) bedeutet, dass die Grafik unabhängig von der Auswahl der (ersten) Option angezeigt wird.
+    >Tipp: Erklärende Grafiken können abhängig von `option` angezeigt werden (max. 9 verschiedene je `option`), indem Sie mehrere Grafiken `Kurztitel011.svg`, `Kurztitel021.svg` etc. hinterlegen. Die Position der Ziffern beschreibt die `option`, die Ziffer selbst die Auswahl. Eine `0` (hier an erster Stelle) bedeutet, dass die Grafik unabhängig von der Auswahl der (hier ersten) Option angezeigt wird.
 1) Füllen Sie die Informationen für Eingabewerte `input[…]` nach dem angegebenen Schema. Verwenden Sie für `x` einen für dieses Modell eindeutigen Formelbuchstaben. Weitere Werte sind optional und dienen zur Darstellung entsprechender Graphen oder der Anzeige nur bei vorheriger Auswahl von `option`.
     ```
     input['x'] = ('Name', Standardwert, 'Einheit')    # Minimalschema

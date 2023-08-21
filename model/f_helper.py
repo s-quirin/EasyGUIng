@@ -25,8 +25,29 @@
 # OTHER DEALINGS IN THE SOFTWARE.
 
 import numpy as np
+from typing import Callable, Sequence
 
-def piecewise(function, var, keys):
+def integrate(function: Callable, var: dict, units: dict):
+    """Berechne das Integral von 'function'.
+    Benötigt werden die Dimensionen 'units: {key: unit}' der Variablen 'var'.
+    """
+    INTEGR_DATAPOINTS = 10001    # resolution of curve to integrate with numpy.trapz
+    NUM_OF_DATAPOINTS = max(len(np.atleast_1d(v_)) for v_ in var.values())
+    x = np.linspace(var['F_0'], var['F_1'], INTEGR_DATAPOINTS, axis=-1)
+    x = np.broadcast_to(x, (NUM_OF_DATAPOINTS, INTEGR_DATAPOINTS))
+    # make other (all) values broadcastable to x
+    for k_ in units:
+        if k_ in var.keys() and hasattr(var[k_].magnitude, '__len__'):
+            # keep scalar, modify vector
+            var[k_] = np.transpose(np.atleast_2d(var[k_]))
+    # search for dimension to integrate
+    for k_ in units:
+        if x.check(units[k_]):
+            var[k_] = x
+            break
+    return np.trapz(function(var), x)
+
+def piecewise(function: Callable, var: dict, keys: Sequence[str]):
     """Iteriere 'function' über abschnittsweise definierte Variablen namens 'keys'"""
     import itertools
     ndvars = [np.atleast_1d(var[k_]) for k_ in keys]    # make iterable objects
