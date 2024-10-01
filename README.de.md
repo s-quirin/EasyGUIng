@@ -4,6 +4,7 @@
 [![GitHub Pipenv locked Python version](https://img.shields.io/github/pipenv/locked/python-version/s-quirin/EasyGUIng)](Pipfile.lock)
 [![GitHub Pipenv locked dependency version](https://img.shields.io/github/pipenv/locked/dependency-version/s-quirin/EasyGUIng/pyside6-essentials)](Pipfile.lock)
 [![GitHub Pipenv locked dependency version](https://img.shields.io/github/pipenv/locked/dependency-version/s-quirin/EasyGUIng/matplotlib)](Pipfile.lock)
+[![GitHub Pipenv locked dependency version](https://img.shields.io/github/pipenv/locked/dependency-version/s-quirin/EasyGUIng/numpy)](Pipfile.lock)
 [![GitHub Pipenv locked dependency version](https://img.shields.io/github/pipenv/locked/dependency-version/s-quirin/EasyGUIng/pint)](Pipfile.lock)
 
 # EasyGUIng
@@ -55,7 +56,7 @@ Unterstützung bei der Installation und bei der Implementierung Ihres Modells er
 1) `option` listet mögliche Auswahlwerte. `option['output']` bezeichnet dabei die möglichen Werte für die Ausgabe (y-Werte).
     >Tipp: Erklärende Grafiken können abhängig von `option` angezeigt werden (max. 9 verschiedene je `option`), indem Sie mehrere Grafiken `Kurztitel011.svg`, `Kurztitel021.svg` etc. hinterlegen. Die Position der Ziffern beschreibt die `option`, die Ziffer selbst die Auswahl. Eine `0` (hier an erster Stelle) bedeutet, dass die Grafik unabhängig von der Auswahl der (hier ersten) Option angezeigt wird.
 1) Füllen Sie die Informationen für Eingabewerte `input[…]` nach dem angegebenen Schema. Verwenden Sie für `x` einen für dieses Modell eindeutigen Formelbuchstaben. Weitere Werte sind optional und dienen zur Darstellung entsprechender Graphen oder der Anzeige nur bei vorheriger Auswahl von `option`.
-    ```
+    ```python
     input['x'] = ('Name', Standardwert, 'Einheit')    # Minimalschema
     input['x'] = ('Name', (minimaler Wert, …, maximaler Wert), 'Einheit', (option['o1'][1], 'option2b'))
     ```
@@ -64,7 +65,7 @@ Unterstützung bei der Installation und bei der Implementierung Ihres Modells er
 
 ### Sonderfall: Abschnittsweise definierte Funktionen
 Viele mathematische Funktionen müssen abschnittsweise gelöst werden, da an bestimmten Stellen Unstetigkeiten auftreten und Divisionen durch Null nicht durchgeführt werden können. Hier hilft der Import und der Aufruf der Hilfsfunktionen `\model\f_helper.py`:
-```
+```python
 import model.f_helper as hp    # Hilfsfunktionen importieren
 # Iteriere 'function' über abschnittsweise definierte Variablen namens 'keys'
 result = hp.piecewise(function, var, keys)
@@ -73,7 +74,7 @@ result = hp.piecewise(function, var, keys)
 ## Manuelle Installation in Python
 >Hier erfahren Sie, wie Sie das Programm lokal in einer Python-Umgebung ausführen.
 
-Sie benötigen eine Installation von Python 3.10 auf Ihrem System, z. B. aus dem [Microsoft Store](https://apps.microsoft.com/store/detail/python-310/9PJPW5LDXLZ5). Öffnen Sie in einer Python Konsole das Verzeichnis, in das Sie die [Projektdateien](/) heruntergeladen haben. Führen Sie nacheinander die folgenden Befehle aus.  
+Sie benötigen eine Installation von Python 3.11 auf Ihrem System, z. B. aus dem [Microsoft Store](https://apps.microsoft.com/detail/9nrwmjp3717k). Öffnen Sie in einer Python Konsole das Verzeichnis, in das Sie die [Projektdateien](/) heruntergeladen haben. Führen Sie nacheinander die folgenden Befehle aus.  
 1. Prüfen Sie, ob `pip` installiert ist und installieren Sie `pipenv`:  
     ```shell
     python -m pip --version
@@ -81,7 +82,7 @@ Sie benötigen eine Installation von Python 3.10 auf Ihrem System, z. B. aus d
     ```
 2. Generieren und starten Sie eine virtuelle Umgebung mit allen erforderlichen Abhängigkeiten:  
     ```shell
-    pipenv --python 3.10
+    pipenv --python 3.11
     pipenv install
     pipenv shell
     ```
