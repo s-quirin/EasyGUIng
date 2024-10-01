@@ -2,7 +2,7 @@
 # coding: utf-8
 #
 # EasyGUIng - A GUI building tool for your mathematic model
-# Copyright (C) 2022-2023  s-quirin
+# Copyright (C) 2022-2024  s-quirin
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU Lesser General Public License as published by
@@ -20,8 +20,8 @@
 __Name__ = 'EasyGUIng'
 __Comment__ = 'A GUI building tool for your mathematic model'
 __Author__ = 's-quirin'
-__Version__ = '0.0.3'
-__Date__ = '2023-08-07'
+__Version__ = '0.0.4'
+__Date__ = '2024-09-30'
 __License__ = 'LGPL-3.0-or-later'
 __Source__ = 'https://github.com/s-quirin/EasyGUIng'
 
@@ -53,6 +53,10 @@ g_modelpath_gen = g_modeldir.glob('*.py')   # is generator (from .glob) -> use o
 # Dynamic module import
 from importlib.machinery import SourceFileLoader
 
+# Localisation
+import locale
+locale.setlocale(locale.LC_ALL, '')    # get locale from the environment
+
 # GUI
 from PySide6 import QtCore as qtc
 from PySide6 import QtGui as qtg
@@ -63,21 +67,23 @@ import matplotlib.pyplot as plt
 from matplotlib.backends.backend_qtagg import (
     FigureCanvas, NavigationToolbar2QT as NavigationToolbar)
 # https://matplotlib.org/stable/gallery/user_interfaces/embedding_in_qt_sgskip.html
-import numpy as np
+plt.rcParams['axes.formatter.use_locale'] = True    # plot localisation
 
 # Physical quantities
+import numpy as np
 import pint
 ureg = pint.UnitRegistry()
 ureg.autoconvert_offset_to_baseunit = True    # °C input without OffsetUnitCalculusError
 # See https://pint.readthedocs.io/en/stable/user/nonmult.html for guidance.
 ureg.setup_matplotlib()    # https://pint.readthedocs.io/en/stable/plotting.html
-ureg.default_format = '~P'    # f'{u:~P}' pint short pretty
+ureg.formatter.default_format = '~P'    # f'{u:~P}' pint short pretty
 ureg.mpl_formatter = '{:~P}'    # pint short pretty for matplotlib
 Q_ = ureg.Quantity
 
 # globals
 g_library_infos = ['Qt ' + qtc.QLibraryInfo.version().toString(),
     'Matplotlib ' + mpl.__version__,
+    'Numpy ' + np.__version__,
     'Pint ' + pint.__version__]
 g_mainWindow = None    # pointer to the main window
 
@@ -98,10 +104,15 @@ class MainWidget(qtw.QTabWidget):
         super().__init__()
 
         # Save and About button next to TabBar
-        icon = self.style().standardIcon(qtw.QStyle.SP_DialogSaveButton)
-        saveBtn = qtw.QPushButton(icon, '', toolTip='Daten exportieren')
-        saveBtn.clicked.connect(self.on_saveBtn_clicked)
+        icon = self.style().standardIcon(qtw.QStyle.SP_DialogSaveButton)    # built-in Qt icon
+        icon = qtg.QIcon.fromTheme(qtg.QIcon.ThemeIcon.DocumentSaveAs, icon)    # native icon
+        key = qtg.QKeySequence.Save
+        key_str = qtg.QKeySequence.listToString(qtg.QKeySequence.keyBindings(key))
+        saveBtn = qtw.QPushButton(icon, '', toolTip=f'Daten exportieren ({key_str})')
         saveBtn.setEnabled(False)
+        saveBtn.setShortcut(key)
+        saveBtn.clicked.connect(self.on_saveBtn_clicked)
+
         aboutBtn = qtw.QPushButton('?', toolTip='Über')
         aboutBtn.setFixedSize(saveBtn.sizeHint())
         aboutBtn.clicked.connect(self.on_aboutBtn_clicked)
@@ -345,10 +356,16 @@ class PageWidget(qtw.QWidget):
         self.plotMax.stateChanged.connect(self.plot_updatePending)
 
         # Input/Output: Plot
-        self.plotBtn_icons = (self.style().standardIcon(qtw.QStyle.SP_BrowserReload),
-                              self.style().standardIcon(qtw.QStyle.SP_BrowserStop))
-        self.plotBtn = qtw.QPushButton(self.plotBtn_icons[0], '', toolTip='Zeichne')
+        icons = (self.style().standardIcon(qtw.QStyle.SP_BrowserReload),
+                 self.style().standardIcon(qtw.QStyle.SP_BrowserStop))
+        # built-in Qt icons as fallback for native icons
+        self.plotBtn_icons = (qtg.QIcon.fromTheme(qtg.QIcon.ThemeIcon.SyncSynchronizing, icons[0]),
+                              qtg.QIcon.fromTheme(qtg.QIcon.ThemeIcon.MediaPlaybackStop, icons[1]))
+        key = qtg.QKeySequence.Refresh
+        key_str = qtg.QKeySequence.listToString(qtg.QKeySequence.keyBindings(key))
+        self.plotBtn = qtw.QPushButton(self.plotBtn_icons[0], '', toolTip=f'Zeichne ({key_str})')
         self.plotBtn.setDefault(True)
+        self.plotBtn.setShortcut(qtg.QKeySequence.Refresh)
         self.plotBtn.clicked.connect(self.on_plotBtn_clicked)
 
         plotStateOkay = qtw.QLabel('✔', styleSheet='QLabel {color: green;}')
@@ -675,8 +692,9 @@ class ModelPlot(qtw.QWidget):
             self.ax.figure.canvas.draw()
             parent.plot_isBusy(False)
 
-    def legendText(self, dictionary: dict):
-        texts = [f'{v_}' for k_, v_ in dictionary.items() if k_ in self.legendKeys]
+    def legendText(self, qty: dict):
+        """Localized Quantities (e.g. decimal separator) for legend"""
+        texts = [locale.localize(str(v_)) for k_, v_ in qty.items() if k_ in self.legendKeys]
         return ', '.join(texts)
 
     def markExtremum(self, *markMinMax: qtc.Qt.CheckState):
